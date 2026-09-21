@@ -196,6 +196,7 @@
 
   #define _T(x)     x
   #define _tcslen   strlen
+  #define _tgetenv  getenv
   #define _tcscat   strcat
   #define _tcschr   strchr
   #define _tcsrchr  strrchr

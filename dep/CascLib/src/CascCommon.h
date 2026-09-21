@@ -77,6 +77,7 @@ typedef enum _CBLD_TYPE
     CascBuildNone = 0,                              // No build type found
     CascBuildDb,                                    // .build.db (older storages)
     CascBuildInfo,                                  // .build.info
+    CascBuildConfig,                                // data\.build.config
     CascVersions                                    // versions (cached or online)
 } CBLD_TYPE, *PCBLD_TYPE;
 
@@ -122,14 +123,14 @@ typedef struct _CASC_INDEX
 // Both version 1 and version 2 are converted to this structure
 typedef struct _CASC_INDEX_HEADER
 {
-    USHORT IndexVersion;                            // 5 for index v 1.0, 7 for index version 2.0
+    USHORT Revision;                                // 5 for index v 1.0, 7 for index version 2.0
     BYTE   BucketIndex;                             // Should be the same as the first byte of the hex filename.
-    BYTE   StorageOffsetLength;                     // Length, in bytes, of the StorageOffset field in the EKey entry
-    BYTE   EncodedSizeLength;                       // Length, in bytes, of the EncodedSize in the EKey entry
-    BYTE   EKeyLength;                              // Length, in bytes, of the (trimmed) EKey in the EKey entry
-    BYTE   FileOffsetBits;                          // Number of bits of the archive file offset in StorageOffset field. Rest is data segment index
+    BYTE   SpanOffsetBytes;                         // Length, in bytes, of the StorageOffset field in the EKey entry
+    BYTE   SpanSizeBytes;                           // Length, in bytes, of the EncodedSize in the EKey entry
+    BYTE   KeyBytes;                                // Length, in bytes, of the (trimmed) EKey in the EKey entry
+    BYTE   SegmentBits;                             // Number of bits of the archive file offset in StorageOffset field. Rest is data segment index
     BYTE   Alignment;
-    ULONGLONG SegmentSize;                          // Size of one data segment (aka data.### file)
+    ULONGLONG MaxFileOffset;                        // Size of one data segment (aka data.### file)
     size_t HeaderLength;                            // Length of the on-disk header structure, in bytes
     size_t HeaderPadding;                           // Length of padding after the header
     size_t EntryLength;                             // Length of the on-disk EKey entry structure, in bytes
@@ -313,7 +314,7 @@ struct TCascStorage
     LPTSTR  szCdnPath;                              // Remote CDN sub path for the product
     LPSTR   szRegion;                               // Product region. Only when "versions" is used as storage root file
     LPSTR   szBuildKey;                             // Product build key, aka MD5 of the build file
-    DWORD dwDefaultLocale;                          // Mask of installed localles
+    DWORD dwDefaultLocale;                          // Mask of installed locales
     DWORD dwBuildNumber;                            // Product build number
     DWORD dwRefCount;                               // Number of references
     DWORD dwFeatures;                               // List of CASC features. See CASC_FEATURE_XXX
@@ -353,7 +354,7 @@ struct TCascStorage
     size_t TotalFiles;                              // Total number of files in the storage, some may not be present locally
     size_t EKeyEntries;                             // Number of CKeyEntry-ies loaded from text build file
     size_t EKeyLength;                              // EKey length from the index files
-    DWORD FileOffsetBits;                           // Number of bits in the storage offset which mean data segent offset
+    DWORD FileOffsetBits;                           // Number of bits in the storage offset which mean data segment offset
 
     CASC_KEY_MAP KeyMap;                            // Growable map of encryption keys
     ULONGLONG  LastFailKeyName;                     // The value of the encryption key that recently was NOT found.
@@ -391,10 +392,10 @@ struct TCascFile
     ULONGLONG FilePointer;                          // Current file pointer
     DWORD SpanCount;                                // Number of file spans. There is one CKey entry for each file span
     DWORD bVerifyIntegrity:1;                       // If true, then the data are validated more strictly when read
-    DWORD bDownloadFileIf:1;                        // If true, then the data will be downloaded from the online storage if missing
+    DWORD bAllowDownloading:1;                      // If true, then the data will be downloaded from the online storage if missing
     DWORD bCloseFileStream:1;                       // If true, file stream needs to be closed during CascCloseFile
     DWORD bOvercomeEncrypted:1;                     // If true, then CascReadFile will fill the part that is encrypted (and key was not found) with zeros
-    DWORD bFreeCKeyEntries:1;                       // If true, dectructor will free the array of CKey entries
+    DWORD bFreeCKeyEntries:1;                       // If true, destructor will free the array of CKey entries
 
     ULONGLONG FileCacheStart;                       // Starting offset of the file cached area
     ULONGLONG FileCacheEnd;                         // Ending offset of the file cached area
@@ -517,7 +518,7 @@ void  FreeIndexFiles(TCascStorage * hs);
 // Support for ROOT file
 
 DWORD RootHandler_CreateMNDX(TCascStorage * hs, CASC_BLOB & RootFile);
-DWORD RootHandler_CreateTVFS(TCascStorage * hs, CASC_BLOB & RootFile);
+DWORD RootHandler_CreateTVFS(TCascStorage * hs, CASC_BLOB & RootFile, DWORD dwLocaleMask = 0xFFFFFFFF);
 DWORD RootHandler_CreateDiablo3(TCascStorage * hs, CASC_BLOB & RootFile);
 DWORD RootHandler_CreateWoW(TCascStorage * hs, CASC_BLOB & RootFile, DWORD dwLocaleMask);
 DWORD RootHandler_CreateOverwatch(TCascStorage * hs, CASC_BLOB & RootFile);

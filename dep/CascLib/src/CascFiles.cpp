@@ -32,6 +32,9 @@ static DWORD RibbitDownloadFile(LPCTSTR szCdnHostUrl, LPCTSTR szProduct, LPCTSTR
 //-----------------------------------------------------------------------------
 // Local structures
 
+#define _ROOT(name)  _T(name)
+#define _DATA(name)  _T("data") _T(PATH_SEP_STRING) _T(name)
+
 struct TBuildFileInfo
 {
     LPCTSTR szFileName;
@@ -39,28 +42,22 @@ struct TBuildFileInfo
     CBLD_TYPE BuildFileType;
 };
 
-struct TGameLocaleString
-{
-    const char * szLocale;
-    DWORD dwLocale;
-};
-
 static const TBuildFileInfo BuildTypes[] =
 {
-    {_T(".build.info"), 11, CascBuildInfo},         // Since HOTS build 30027, the game uses .build.info file for storage info
-    {_T(".build.db"),   9,  CascBuildDb},           // Older CASC storages
-    {_T("versions"),    8,  CascVersions},          // Online/cached CASC storages
+    {_ROOT(".build.info"),   11, CascBuildInfo},      // Since HOTS build 30027, the game uses .build.info file for storage info
+    {_ROOT(".build.db"),      9, CascBuildDb},        // Older CASC storages
+    {_DATA(".build.config"), 18, CascBuildConfig},    // Static CASC storages, since Diablo II Resurrected, Steam edition, build 93236
+    {_ROOT("versions"),       8, CascVersions},       // Online/cached CASC storages
 };
 
 static LPCTSTR DataDirs[] =
 {
-    _T("data") _T(PATH_SEP_STRING) _T("casc"),      // Overwatch. This item must be the first in the list
-    _T("data"),                                     // TACT casc (for Linux systems)
-    _T("Data"),                                     // World of Warcraft, Diablo
-    _T("SC2Data"),                                  // Starcraft II (Legacy of the Void) build 38749
-    _T("HeroesData"),                               // Heroes of the Storm
-    _T("BNTData"),                                  // Heroes of the Storm, until build 30414
-    NULL,
+    _DATA("casc"),                                    // Overwatch. This item must be the first in the list
+    _ROOT("data"),                                    // TACT casc (for Linux systems)
+    _ROOT("Data"),                                    // World of Warcraft, Diablo
+    _ROOT("SC2Data"),                                 // Starcraft II (Legacy of the Void) build 38749
+    _ROOT("HeroesData"),                              // Heroes of the Storm
+    _ROOT("BNTData"),                                 // Heroes of the Storm, until build 30414
 };
 
 // Dead as of September 2025
@@ -99,7 +96,7 @@ static LPCTSTR GetSubFolder(CPATH_TYPE PathType)
         case PathTypeConfig: return _T("config");
         case PathTypeData:   return _T("data");
         case PathTypePatch:  return _T("patch");
-        
+
         default:
             assert(false);
             return _T("");
@@ -119,7 +116,7 @@ static bool CheckForTwoDigitFolder(LPCTSTR szPathName, void * pvContext)
             return false;
         }
     }
-    
+
     // Keep searching
     return true;
 }
@@ -336,7 +333,7 @@ static DWORD LoadHashArray(
             // Move buffer
             pbBuffer += MD5_HASH_SIZE;
         }
-        
+
         dwErrCode = ERROR_SUCCESS;
     }
 
@@ -377,6 +374,14 @@ static DWORD LoadCKeyEntry(TCascStorage * hs, const char * szVariableName, const
     // Ignore "xxx-config" items
     if(StringEndsWith(szVariableName, nLength, "-config", 7))
         return ERROR_SUCCESS;
+
+    // Static VFS manifests can be stored as raw ZLIB streams
+    if(hs->BuildFileType == CascBuildConfig && StringEndsWith(szVariableName, nLength, "-espec", 6))
+    {
+        if((szDataEnd - szDataPtr) == 1 && szDataPtr[0] == 'z')
+            pCKeyEntry->Flags |= CASC_CE_ZLIB_DATA;
+        return ERROR_SUCCESS;
+    }
 
     // If the variable ends at "-size", it means we need to capture the size
     if(StringEndsWith(szVariableName, nLength, "-size", 5))
@@ -419,6 +424,13 @@ static DWORD LoadCKeyEntry(TCascStorage * hs, const char * szVariableName, const
                 if(szDataPtr == NULL)
                     return ERROR_BAD_FORMAT;
                 pCKeyEntry->Flags |= CASC_CE_HAS_EKEY;
+
+                // Static storages encode the data file and offset in the last 7 bytes
+                if(hs->BuildFileType == CascBuildConfig)
+                {
+                    pCKeyEntry->StorageOffset = ConvertBytesToInteger_7(pCKeyEntry->EKey + CASC_EKEY_SIZE);
+                    pCKeyEntry->Flags |= CASC_CE_FILE_IS_LOCAL;
+                }
 
                 // Increment the number of EKey entries loaded from text build file
                 hs->EKeyEntries++;
@@ -483,7 +495,7 @@ static DWORD LoadVfsRootEntry(TCascStorage * hs, const char * szVariableName, co
                     pCKeyEntry = (PCASC_CKEY_ENTRY)pArray->InsertAt(VfsRootIndex - 1);
                     if(pCKeyEntry == NULL)
                         return ERROR_NOT_ENOUGH_MEMORY;
-                    
+
                     // Initialize the new entry
                     pCKeyEntry->Init();
                 }
@@ -542,14 +554,23 @@ static DWORD LoadBuildNumber(TCascStorage * hs, const char * /* szVariableName *
     return ERROR_BAD_FORMAT;
 }
 
-static int LoadQueryKey(const CASC_CSV_COLUMN & Column, CASC_BLOB & Key)
+static DWORD LoadQueryKey(const CASC_CSV_COLUMN & Column, CASC_BLOB & Key)
 {
-    // Check the input data
-    if(Column.szValue == NULL)
-        return ERROR_BUFFER_OVERFLOW;
-    if(Column.nLength != MD5_STRING_SIZE)
-        return ERROR_BAD_FORMAT;
+    // Check for existence
+    if(Column.Empty())
+    {
+        Key.Free();
+        return ERROR_SUCCESS;
+    }
 
+    // Check for invalid length
+    if(Column.nLength && Column.nLength != MD5_STRING_SIZE)
+    {
+        assert(false);
+        return ERROR_BAD_FORMAT;
+    }
+
+    // Convert the text value into binary blob
     return LoadHashArray(&Key, Column.szValue, Column.szValue + Column.nLength, 1);
 }
 
@@ -586,19 +607,24 @@ static DWORD GetDefaultLocaleByRegion(LPCSTR szRegion)
 
 static DWORD GetDefaultLocaleMask(const CASC_CSV_COLUMN & Column)
 {
-    LPCSTR szTagEnd = Column.szValue + Column.nLength - 4;
-    LPCSTR szTagPtr;
     DWORD dwLocaleValue;
     DWORD dwLocaleMask = 0;
 
-    // Go through the whole tag string
-    for(szTagPtr = Column.szValue; szTagPtr <= szTagEnd; szTagPtr++)
+    // Check whether the column contains some data
+    if(!Column.Empty())
     {
-        // Try to recognize the 4-char locale code
-        if((dwLocaleValue = GetLocaleValue(szTagPtr)) != CASC_LOCALE_NONE)
+        LPCSTR szTagEnd = Column.szValue + Column.nLength - 4;
+        LPCSTR szTagPtr;
+
+        // Go through the whole tag string
+        for(szTagPtr = Column.szValue; szTagPtr <= szTagEnd; szTagPtr++)
         {
-            dwLocaleMask |= dwLocaleValue;
-            szTagPtr += 3;  // Will be moved by 1 more at the end of the loop
+            // Try to recognize the 4-char locale code
+            if((dwLocaleValue = GetLocaleValue(szTagPtr)) != CASC_LOCALE_NONE)
+            {
+                dwLocaleMask |= dwLocaleValue;
+                szTagPtr += 3;  // Will be moved by 1 more at the end of the loop
+            }
         }
     }
     return dwLocaleMask;
@@ -638,7 +664,7 @@ static DWORD ParseFile_BuildInfo(TCascStorage * hs, CASC_CSV & Csv)
                 nDefault = i;
             }
         }
-        
+
         // Only if there is more than one active products
         if(nProductCount > 1)
         {
@@ -706,21 +732,18 @@ static DWORD ParseFile_BuildInfo(TCascStorage * hs, CASC_CSV & Csv)
         hs->dwDefaultLocale = GetDefaultLocaleMask(Csv[nSelected]["Tags!STRING:0"]);
 
         // Get the CDN servers and hosts
-        if(hs->dwFeatures & CASC_FEATURE_ONLINE)
-        {
-            GetDefaultCdnServers(hs, Csv[nSelected]["CDN Hosts!STRING:0"]);
-            GetDefaultCdnPath(hs, Csv[nSelected]["CDN Path!STRING:0"]);
-        }
+        GetDefaultCdnServers(hs, Csv[nSelected]["CDN Hosts!STRING:0"]);
+        GetDefaultCdnPath(hs, Csv[nSelected]["CDN Path!STRING:0"]);
 
         // If we found version, extract a build number
         const CASC_CSV_COLUMN & VerColumn = Csv[nSelected]["Version!STRING:0"];
-        if(VerColumn.szValue && VerColumn.nLength)
+        if(!VerColumn.Empty())
         {
             LoadBuildNumber(hs, NULL, VerColumn.szValue, VerColumn.szValue + VerColumn.nLength, NULL);
         }
 
-        // Verify all variables
-        return (hs->CdnBuildKey.pbData != NULL && hs->CdnConfigKey.pbData != NULL) ? ERROR_SUCCESS : ERROR_BAD_FORMAT;
+        // At least the build key must be valid here
+        return hs->CdnBuildKey.Valid() ? ERROR_SUCCESS : ERROR_BAD_FORMAT;
     }
 
     return ERROR_FILE_NOT_FOUND;
@@ -816,7 +839,7 @@ static DWORD ParseFile_CdnConfig(TCascStorage * hs, void * pvListFile)
         if(CheckConfigFileVariable(hs, szLineBegin, szLineEnd, "archives", LoadQueryKey, &hs->ArchivesKey))
             continue;
 
-        // CDN keys of patch archives (needs research) 
+        // CDN keys of patch archives (needs research)
         if(CheckConfigFileVariable(hs, szLineBegin, szLineEnd, "patch-archives", LoadQueryKey, &hs->PatchArchivesKey))
             continue;
 
@@ -842,6 +865,7 @@ static DWORD ParseFile_CdnBuild(TCascStorage * hs, void * pvListFile)
     const char * szLineBegin;
     const char * szLineEnd = NULL;
     DWORD dwErrCode;
+    USHORT CheckedFlags;
 
     // Initialize the empty VFS array
     dwErrCode = hs->VfsRootList.Create<CASC_CKEY_ENTRY>(0x10);
@@ -872,7 +896,7 @@ static DWORD ParseFile_CdnBuild(TCascStorage * hs, void * pvListFile)
             continue;
 
         // Content key + encoded key of the ENCODING file. Contains CKey+EKey
-        // If either none or 1 is found, the game (at least Wow) switches to plain-data(?). Seen in build 20173 
+        // If either none or 1 is found, the game (at least Wow) switches to plain-data(?). Seen in build 20173
         if(CheckConfigFileVariable(hs, szLineBegin, szLineEnd, "encoding*", LoadCKeyEntry, &hs->EncodingCKey))
             continue;
 
@@ -900,8 +924,23 @@ static DWORD ParseFile_CdnBuild(TCascStorage * hs, void * pvListFile)
     }
 
     // Both CKey and EKey of ENCODING file is required
-    if((hs->EncodingCKey.Flags & (CASC_CE_HAS_CKEY | CASC_CE_HAS_EKEY)) != (CASC_CE_HAS_CKEY | CASC_CE_HAS_EKEY))
+    CheckedFlags = (hs->BuildFileType == CascBuildConfig) ? hs->VfsRoot.Flags : hs->EncodingCKey.Flags;
+    if((CheckedFlags & (CASC_CE_HAS_CKEY | CASC_CE_HAS_EKEY)) != (CASC_CE_HAS_CKEY | CASC_CE_HAS_EKEY))
         dwErrCode = ERROR_BAD_FORMAT;
+    return dwErrCode;
+}
+
+static DWORD LoadBuildConfigFile(TCascStorage * hs)
+{
+    void * pvListFile;
+    DWORD dwErrCode = ERROR_FILE_NOT_FOUND;
+
+    pvListFile = ListFile_OpenExternal(hs->szMainFile);
+    if(pvListFile != NULL)
+    {
+        dwErrCode = ParseFile_CdnBuild(hs, pvListFile);
+        CASC_FREE(pvListFile);
+    }
     return dwErrCode;
 }
 
@@ -1290,6 +1329,11 @@ DWORD FetchCascFile(
     DWORD dwErrCode = ERROR_SUCCESS;
     TCHAR szCdnServer[MAX_PATH] = _T("");
 
+    // Downloads of files missing in a local installation may be redirected
+    // to a separate cache folder, so the game folder stays untouched
+    if(const TCHAR * szDownloadDir = _tgetenv(_T("CASCLIB_DOWNLOAD_DIR")))
+        szRootPath = szDownloadDir;
+
     // First, construct the local path
     LocalPath.Create(szRootPath, GetSubFolder(PathType), NULL);
     LocalPath.AppendEKey(pbEKey);
@@ -1324,7 +1368,7 @@ DWORD FetchCascFile(
             if(dwErrCode == ERROR_SUCCESS || dwErrCode == ERROR_NOT_ENOUGH_MEMORY)
                 return dwErrCode;
         }
-        
+
         // Sorry, the file was not found
         dwErrCode = ERROR_FILE_NOT_FOUND;
     }
@@ -1351,7 +1395,7 @@ DWORD FetchCascFile(TCascStorage * hs, CPATH_TYPE PathType, LPBYTE pbEKey, LPCTS
             // Fill-in the archive key
             pbArchiveKey = pbEKey = hs->ArchivesKey.pbData + (MD5_HASH_SIZE * pArchiveInfo->ArchiveIndex);
             memcpy(pArchiveInfo->ArchiveKey, pbArchiveKey, MD5_HASH_SIZE);
-            
+
             // Remap the path type to "data"
             PathType = PathTypeData;
         }
@@ -1507,6 +1551,9 @@ DWORD CheckCascBuildFileExact(CASC_BUILD_FILE & BuildFile, LPCTSTR szLocalPath)
     // Check every type of the build file
     for(size_t i = 0; i < _countof(BuildTypes); i++)
     {
+        if(nLength < BuildTypes[i].nLength)
+            continue;
+
         // We support any file name with the appropriate ending,
         // for example wow-19342.build.info or wow-47186.versions
         szFileType = szLocalPath + nLength - BuildTypes[i].nLength;
@@ -1532,7 +1579,7 @@ DWORD CheckCascBuildFileDirs(CASC_BUILD_FILE & BuildFile, LPCTSTR szLocalPath)
 {
     CASC_PATH<TCHAR> WorkPath(szLocalPath, NULL);
     DWORD dwLevelCount = 0;
-    
+
     // Clear the build file structure
     memset(&BuildFile, 0, sizeof(CASC_BUILD_FILE));
 
@@ -1689,6 +1736,10 @@ DWORD LoadMainFile(TCascStorage * hs)
             dwErrCode = LoadCsvFile(hs, hs->szMainFile, ParseFile_BuildInfo, true);
             break;
 
+        case CascBuildConfig:   // Static storages have "data\.build.config"
+            dwErrCode = LoadBuildConfigFile(hs);
+            break;
+
         case CascVersions:      // Online storages have "versions+cdns"
             dwErrCode = LoadBuildFile_Versions_Cdns(hs);
             break;
@@ -1763,10 +1814,16 @@ DWORD LoadInternalFileToMemory(TCascStorage * hs, PCASC_CKEY_ENTRY pCKeyEntry, C
             if((dwErrCode = FileData.SetSize(cbFileData)) == ERROR_SUCCESS)
             {
                 // Read the entire file to memory
-                CascReadFile(hFile, FileData.pbData, cbFileData, &dwBytesRead);
-                if(dwBytesRead != cbFileData)
+                if(CascReadFile(hFile, FileData.pbData, cbFileData, &dwBytesRead))
                 {
-                    dwErrCode = ERROR_FILE_CORRUPT;
+                    if(dwBytesRead != cbFileData)
+                    {
+                        dwErrCode = ERROR_FILE_CORRUPT;
+                    }
+                }
+                else
+                {
+                    dwErrCode = GetCascError();
                 }
             }
             else
@@ -1837,7 +1894,7 @@ DWORD LoadFileToMemory(LPCTSTR szFileName, CASC_BLOB & FileData)
     {
         dwErrCode = GetCascError();
     }
-    
+
     return dwErrCode;
 }
 

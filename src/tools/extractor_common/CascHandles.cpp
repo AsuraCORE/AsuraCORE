@@ -189,6 +189,10 @@ Storage* Storage::Open(boost::filesystem::path const& path, uint32 localeMask, c
     args.szLocalPath = strPath.c_str();
     args.szCodeName = strProduct.c_str();
     args.dwLocaleMask = localeMask;
+    // AsuraCORE: 12.1+ clients keep part of the files (e.g. DB2) on CDN only.
+    // With CASCLIB_DOWNLOAD_DIR set, missing files are downloaded there from Blizzard CDN.
+    if (getenv("CASCLIB_DOWNLOAD_DIR"))
+        args.dwFlags |= CASC_FEATURE_ONLINE;
     HANDLE handle = nullptr;
     if (!CascOpenStorageEx(nullptr, &args, false, &handle))
     {

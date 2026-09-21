@@ -39,6 +39,11 @@ struct CASC_CSV_COLUMN
         nLength = 0;
     }
 
+    bool Empty() const
+    {
+        return (szValue == NULL || nLength == 0);
+    }
+
     const char * szValue;
     size_t nLength;
 };
@@ -92,7 +97,7 @@ class CASC_CSV
     size_t GetHeaderColumns() const;
     size_t GetColumnIndex(const char * szColumnName) const;
 
-    void * GetUserData() const 
+    void * GetUserData() const
     {
         return m_pvUserData;
     }

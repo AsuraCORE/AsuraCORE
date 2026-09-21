@@ -25,7 +25,27 @@ static DWORD GetStreamEncodedSize(TFileStream * pStream)
     return (DWORD)(FileSize);
 }
 
-static DWORD OpenDataStream(TCascFile * hf, PCASC_FILE_SPAN pFileSpan, PCASC_CKEY_ENTRY pCKeyEntry, bool bDownloadFileIf)
+static DWORD OpenStaticDataStream(TCascFile * hf, PCASC_FILE_SPAN pFileSpan)
+{
+    TCascStorage * hs = hf->hs;
+    TFileStream * pStream;
+    TCHAR szPlainName[0x80];
+    DWORD dwArchiveIndex = pFileSpan->ArchiveIndex;
+
+    // Static storages use files named "GG-PPPPPPPP.data"
+    CascStrPrintf(szPlainName, _countof(szPlainName), _T("%02u-%08x.data"), (dwArchiveIndex >> 8), (dwArchiveIndex & 0xFF));
+
+    CASC_PATH<TCHAR> DataFile(hs->szDataPath, szPlainName, NULL);
+    pStream = FileStream_OpenFile(DataFile, STREAM_FLAG_READ_ONLY | STREAM_FLAG_WRITE_SHARE | STREAM_PROVIDER_FLAT | STREAM_FLAG_FILL_MISSING | BASE_PROVIDER_FILE);
+    if((pFileSpan->pStream = pStream) != NULL)
+    {
+        hf->bCloseFileStream = true;
+        return ERROR_SUCCESS;
+    }
+    return ERROR_FILE_NOT_FOUND;
+}
+
+static DWORD OpenDataStream(TCascFile * hf, PCASC_FILE_SPAN pFileSpan, PCASC_CKEY_ENTRY pCKeyEntry, bool bAllowDownloading)
 {
     TCascStorage * hs = hf->hs;
     TFileStream * pStream = NULL;
@@ -37,6 +57,9 @@ static DWORD OpenDataStream(TCascFile * hf, PCASC_FILE_SPAN pFileSpan, PCASC_CKE
     if(pCKeyEntry->Flags & CASC_CE_FILE_IS_LOCAL)
     {
         DWORD dwArchiveIndex = pFileSpan->ArchiveIndex;
+
+        if(hs->BuildFileType == CascBuildConfig)
+            return OpenStaticDataStream(hf, pFileSpan);
 
         // Lock the storage to make the operation thread-safe
         CascLock(hs->StorageLock);
@@ -60,60 +83,66 @@ static DWORD OpenDataStream(TCascFile * hf, PCASC_FILE_SPAN pFileSpan, PCASC_CKE
         CascUnlock(hs->StorageLock);
 
         // Return error or success
-        pFileSpan->pStream = hs->DataFiles[dwArchiveIndex];
-        return (pFileSpan->pStream != NULL) ? ERROR_SUCCESS : ERROR_FILE_NOT_FOUND;
+        if((pFileSpan->pStream = hs->DataFiles[dwArchiveIndex]) != NULL)
+            return ERROR_SUCCESS;
     }
-    else
+
+    // If the file is allowed to be downloaded, do it
+    if(bAllowDownloading)
     {
-        if(bDownloadFileIf)
+        CASC_ARCHIVE_INFO ArchiveInfo = {0};
+        CASC_PATH<TCHAR> LocalPath;
+        CPATH_TYPE PathType = (pCKeyEntry->Flags & CASC_CE_FILE_PATCH) ? PathTypePatch : PathTypeData;
+
+        // Fetch the file
+        dwErrCode = FetchCascFile(hs, PathType, pCKeyEntry->EKey, NULL, LocalPath, &ArchiveInfo);
+        if(dwErrCode == ERROR_SUCCESS)
         {
-            CASC_ARCHIVE_INFO ArchiveInfo = {0};
-            CASC_PATH<TCHAR> LocalPath;
-            CPATH_TYPE PathType = (pCKeyEntry->Flags & CASC_CE_FILE_PATCH) ? PathTypePatch : PathTypeData;
-
-            // Fetch the file
-            dwErrCode = FetchCascFile(hs, PathType, pCKeyEntry->EKey, NULL, LocalPath, &ArchiveInfo);
-            if(dwErrCode == ERROR_SUCCESS)
+            pStream = FileStream_OpenFile(LocalPath, BASE_PROVIDER_FILE | STREAM_PROVIDER_FLAT);
+            if(pStream != NULL)
             {
-                pStream = FileStream_OpenFile(LocalPath, BASE_PROVIDER_FILE | STREAM_PROVIDER_FLAT);
-                if(pStream != NULL)
+                // Initialize information about the position and size of the file in archive
+                // On loose files, their position is zero and encoded size is length of the file
+                if(CascIsValidMD5(ArchiveInfo.ArchiveKey))
                 {
-                    // Initialize information about the position and size of the file in archive
-                    // On loose files, their position is zero and encoded size is length of the file
-                    if(CascIsValidMD5(ArchiveInfo.ArchiveKey))
-                    {
-                        // Archive position
-                        pFileSpan->ArchiveIndex = ArchiveInfo.ArchiveIndex;
-                        pFileSpan->ArchiveOffs = ArchiveInfo.ArchiveOffs;
+                    // Archive position
+                    pFileSpan->ArchiveIndex = ArchiveInfo.ArchiveIndex;
+                    pFileSpan->ArchiveOffs = ArchiveInfo.ArchiveOffs;
 
-                        // Encoded size
-                        if(pCKeyEntry->EncodedSize == CASC_INVALID_SIZE)
-                            pCKeyEntry->EncodedSize = ArchiveInfo.EncodedSize;
-                        assert(pCKeyEntry->EncodedSize == ArchiveInfo.EncodedSize);
-                    }
-                    else
-                    {
-                        // Archive position
-                        pFileSpan->ArchiveIndex = 0;
-                        pFileSpan->ArchiveOffs = 0;
-
-                        // Encoded size
-                        if(pCKeyEntry->EncodedSize == CASC_INVALID_SIZE)
-                            pCKeyEntry->EncodedSize = GetStreamEncodedSize(pStream);
-                        assert(pCKeyEntry->EncodedSize == GetStreamEncodedSize(pStream));
-                    }
-
-                    // We need to close the file stream after we're done
-                    pFileSpan->pStream = pStream;
-                    hf->bCloseFileStream = true;
-                    return ERROR_SUCCESS;
+                    // Encoded size
+                    if(pCKeyEntry->EncodedSize == CASC_INVALID_SIZE)
+                        pCKeyEntry->EncodedSize = ArchiveInfo.EncodedSize;
+                    assert(pCKeyEntry->EncodedSize == ArchiveInfo.EncodedSize);
                 }
-            }
-            return dwErrCode;
-        }
+                else
+                {
+                    DWORD StreamEncodedSize = GetStreamEncodedSize(pStream);
+                    DWORD StreamHeaderSize = FIELD_OFFSET(BLTE_ENCODED_HEADER, Signature);
 
-        return ERROR_FILE_OFFLINE;
+                    // Archive position
+                    pFileSpan->ArchiveIndex = 0;
+                    pFileSpan->ArchiveOffs = 0;
+
+                    // Encoded size
+                    if(pCKeyEntry->EncodedSize == CASC_INVALID_SIZE)
+                        pCKeyEntry->EncodedSize = StreamEncodedSize;
+
+                    // Encoded size could also be smaller by sizeof(BLTE_HEADER)
+                    if(pCKeyEntry->EncodedSize == StreamEncodedSize + StreamHeaderSize)
+                        pCKeyEntry->EncodedSize = StreamEncodedSize;
+
+                    assert(pCKeyEntry->EncodedSize == StreamEncodedSize);
+                }
+
+                // We need to close the file stream after we're done
+                pFileSpan->pStream = pStream;
+                hf->bCloseFileStream = true;
+                return ERROR_SUCCESS;
+            }
+        }
+        return dwErrCode;
     }
+    return ERROR_FILE_NOT_FOUND;
 }
 
 #ifdef CASCLIB_DEBUG
@@ -377,6 +406,34 @@ static DWORD LoadSpanFramesForPlainFile(PCASC_FILE_SPAN pFileSpan, PCASC_CKEY_EN
     return ERROR_NOT_ENOUGH_MEMORY;
 }
 
+static DWORD LoadSpanFramesForZlibFile(PCASC_FILE_SPAN pFileSpan, PCASC_CKEY_ENTRY pCKeyEntry)
+{
+    PCASC_FILE_FRAME pFrames;
+
+    // Allocate single "dummy" frame
+    pFrames = CASC_ALLOC<CASC_FILE_FRAME>(1);
+    if(pFrames != NULL)
+    {
+        // Setup the size
+        pFileSpan->EndOffset = pFileSpan->StartOffset + pCKeyEntry->ContentSize;
+
+        // Fill the single frame
+        memset(&pFrames->FrameHash, 0, sizeof(CONTENT_KEY));
+        pFrames->StartOffset = pFileSpan->StartOffset;
+        pFrames->EndOffset = pFrames->StartOffset + pCKeyEntry->ContentSize;
+        pFrames->DataFileOffset = pFileSpan->ArchiveOffs;
+        pFrames->EncodedSize = pCKeyEntry->EncodedSize;
+        pFrames->ContentSize = pCKeyEntry->ContentSize;
+
+        // Save the number of file frames
+        pFileSpan->FrameCount = 1;
+        pFileSpan->pFrames = pFrames;
+        return ERROR_SUCCESS;
+    }
+
+    return ERROR_NOT_ENOUGH_MEMORY;
+}
+
 static DWORD LoadEncodedHeaderAndSpanFrames(PCASC_FILE_SPAN pFileSpan, PCASC_CKEY_ENTRY pCKeyEntry)
 {
     LPBYTE pbEncodedBuffer;
@@ -386,6 +443,10 @@ static DWORD LoadEncodedHeaderAndSpanFrames(PCASC_FILE_SPAN pFileSpan, PCASC_CKE
     // Should only be called when the file frames are NOT loaded
     assert(pFileSpan->pFrames == NULL);
     assert(pFileSpan->FrameCount == 0);
+
+    // Static VFS manifests are raw ZLIB streams without a BLTE header
+    if(pCKeyEntry->Flags & CASC_CE_ZLIB_DATA)
+        return LoadSpanFramesForZlibFile(pFileSpan, pCKeyEntry);
 
     // Allocate the initial buffer for the encoded headers
     pbEncodedBuffer = CASC_ALLOC<BYTE>(MAX_ENCODED_HEADER);
@@ -463,7 +524,7 @@ static DWORD LoadSpanFrames(TCascFile * hf, PCASC_FILE_SPAN pFileSpan, PCASC_CKE
     // Make sure that the data stream is open for that span
     if(pFileSpan->pStream == NULL)
     {
-        dwErrCode = OpenDataStream(hf, pFileSpan, pCKeyEntry, hf->bDownloadFileIf);
+        dwErrCode = OpenDataStream(hf, pFileSpan, pCKeyEntry, hf->bAllowDownloading);
         if(dwErrCode != ERROR_SUCCESS)
             return dwErrCode;
     }
@@ -561,6 +622,16 @@ static DWORD DecodeFileFrame(
     //    fwrite(pbEncoded, 1, pFrame->EncodedSize, fp);
     //    fclose(fp);
     //}
+
+    // If this is a raw ZLIB stream, decompress the entire frame
+    if(pCKeyEntry->Flags & CASC_CE_ZLIB_DATA)
+    {
+        cbDecodedExpected = cbDecoded;
+        dwErrCode = CascDecompress(pbDecoded, &cbDecoded, pbEncoded, cbEncoded);
+        if(cbDecoded < cbDecodedExpected)
+            memset(pbDecoded + cbDecoded, 0, (cbDecodedExpected - cbDecoded));
+        return dwErrCode;
+    }
 
     // If this is a file span with plain data, just copy the data
     if(pCKeyEntry->Flags & CASC_CE_PLAIN_DATA)
