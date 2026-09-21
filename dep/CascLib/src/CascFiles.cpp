@@ -1329,11 +1329,6 @@ DWORD FetchCascFile(
     DWORD dwErrCode = ERROR_SUCCESS;
     TCHAR szCdnServer[MAX_PATH] = _T("");
 
-    // Downloads of files missing in a local installation may be redirected
-    // to a separate cache folder, so the game folder stays untouched
-    if(const TCHAR * szDownloadDir = _tgetenv(_T("CASCLIB_DOWNLOAD_DIR")))
-        szRootPath = szDownloadDir;
-
     // First, construct the local path
     LocalPath.Create(szRootPath, GetSubFolder(PathType), NULL);
     LocalPath.AppendEKey(pbEKey);

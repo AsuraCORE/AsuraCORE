@@ -1183,7 +1183,7 @@ static DWORD LoadCascStorage(TCascStorage * hs, PCASC_OPEN_STORAGE_ARGS pArgs, L
 
     // Merge features
     hs->dwFeatures |= (dwFeatures & (CASC_FEATURE_DATA_ARCHIVES | CASC_FEATURE_DATA_FILES | CASC_FEATURE_ONLINE | CASC_FEATURE_ALLOW_DOWNLOAD));
-    hs->dwFeatures |= (pArgs->dwFlags & (CASC_FEATURE_FORCE_DOWNLOAD | CASC_FEATURE_ONLINE));
+    hs->dwFeatures |= (pArgs->dwFlags & CASC_FEATURE_FORCE_DOWNLOAD);
     hs->dwFeatures |= (BuildFileType == CascVersions) ? CASC_FEATURE_ONLINE : 0;
     hs->BuildFileType = BuildFileType;
 

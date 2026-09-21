@@ -11,6 +11,7 @@ $out    = Join-Path $root "client\extracted"
 New-Item -ItemType Directory -Force $out | Out-Null
 Set-Location $out
 
+
 & "$tools\mapextractor.exe" -i "$client" -o "$out"
 if ($LASTEXITCODE -ne 0) { throw "mapextractor failed" }
 
