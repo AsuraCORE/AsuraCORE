@@ -60,7 +60,7 @@ account set gmlevel 1#1 3 -1       # GM-права на 1-й игровой ак
 ## Извлечение данных (один раз, и после смены билда клиента)
 Клиент русский, поэтому в `worldserver.conf` стоит `DBC.Locale = 8` (ruRU), а DBC лежат в `data/dbc/ruRU`.
 
-**Основной способ (с ПК, без заливки клиента):** `powershell -ExecutionPolicy Bypass -File F:\AsuraCORE	ools\extract-local.ps1`
+**Основной способ (с ПК, без заливки клиента):** `powershell -ExecutionPolicy Bypass -File F:\AsuraCORE\tools\extract-local.ps1`
 извлекает dbc/maps/vmaps из `client\World of Warcraft` экстракторами из `tools\extractors` (Windows-сборка из CI форка) и заливает на сервер.
 Потом на сервере: `/opt/asuracore/gen-mmaps.sh` (1–3 ч), затем `systemctl restart asura-worldserver`.
 
