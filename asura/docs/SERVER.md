@@ -41,7 +41,10 @@ screen -r worldserver        # консоль сервера (выйти не о
 tail -f /opt/asuracore/server/bin/Server.log
 ```
 
-### Создать аккаунт (в консоли worldserver)
+### Аккаунты
+Админ (GM 3): логин и пароль лежат на сервере в `/root/.asuracore_admin`.
+
+Создать новый (в консоли worldserver):
 ```
 bnetaccount create me@asura.local ПАРОЛЬ
 account set gmlevel 1#1 3 -1       # GM-права на 1-й игровой аккаунт
@@ -55,6 +58,17 @@ account set gmlevel 1#1 3 -1       # GM-права на 1-й игровой ак
 Первая сборка идёт ~30 мин, повторные быстрее: ccache + Ninja пересобирают только изменённое.
 
 ## Извлечение данных (один раз, и после смены билда клиента)
+Клиент русский, поэтому в `worldserver.conf` стоит `DBC.Locale = 8` (ruRU), а DBC лежат в `data/dbc/ruRU`.
+
+**Основной способ (с ПК, без заливки клиента):** `powershell -ExecutionPolicy Bypass -File F:\AsuraCORE	ools\extract-local.ps1`
+извлекает dbc/maps/vmaps из `client\World of Warcraft` экстракторами из `tools\extractors` (Windows-сборка из CI форка) и заливает на сервер.
+Потом на сервере: `/opt/asuracore/gen-mmaps.sh` (1–3 ч), затем `systemctl restart asura-worldserver`.
+
+> Клиент 12.1 хранит файлы в новом формате (TVFS-root). Штатная CascLib его не читает, в форке она пропатчена
+> (`asura/casclib-wow-tvfs.patch`, коммит «WoW 12.1 TVFS root support»). Если клиент «неполный» (DB2 не извлекаются),
+> сделай в Battle.net «Проверить и восстановить».
+
+**Запасной способ (через сервер):**
 1. Залей клиент (папку, в которой лежат `.build.info` и `Data/`) на сервер:
    ```powershell
    scp -r "F:\AsuraCORE\client\World of Warcraft\*" asura:/opt/asuracore/client/
