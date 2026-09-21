@@ -1,0 +1,16 @@
+[Unit]
+Description=AsuraCORE worldserver
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/asuracore/server/bin
+ExecStart=/usr/bin/screen -DmS worldserver /opt/asuracore/server/bin/worldserver
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

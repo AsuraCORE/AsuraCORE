@@ -1,0 +1,16 @@
+[Unit]
+Description=AsuraCORE bnetserver
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/asuracore/server/bin
+ExecStart=/usr/bin/screen -DmS bnetserver /opt/asuracore/server/bin/bnetserver
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
