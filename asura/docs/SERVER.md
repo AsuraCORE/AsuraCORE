@@ -38,7 +38,7 @@
 systemctl start|stop|restart asura-bnetserver asura-worldserver
 systemctl status asura-worldserver
 screen -r worldserver        # консоль сервера (выйти не останавливая: Ctrl+A, D)
-tail -f /opt/asuracore/server/bin/Server.log
+tail -f /opt/asuracore/logs/Server.log
 ```
 
 ### Аккаунты
