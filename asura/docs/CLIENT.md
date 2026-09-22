@@ -14,12 +14,12 @@
 
 ## 2. Лаунчер (подключение к нашему серверу)
 Официальный `Wow.exe` ходит на серверы Blizzard. Для своего сервера нужен
-**Arctium Game Launcher**: https://arctium.io/wow/ (исходники: github.com/Burralis/Game-Launcher)
+**Burralis Game Launcher 1.6.1+** (закрытая сборка): https://burralis.io/downloads/. Open-source версия (наш AsuraLauncher) клиент 12.1 пока не поддерживает
 
-- Положи `Arctium Game Launcher.exe` в `World of Warcraft\_retail_\`.
+- Положи `Burralis Game Launcher.exe` в `World of Warcraft\_retail_\`.
 - В `_retail_\WTF\Config.wtf` пропиши:
   ```
-  SET portal "193.124.184.192"
+  SET portal "193-124-184-192.sslip.io"
   ```
 - Запускай игру через Arctium, а не через Battle.net.
 - Для своих файлов (модели, текстуры, карты) используется сборка `ReleaseCustomFiles`, см. `tools/launcher/README.md`.

@@ -3,6 +3,7 @@
 | | |
 |---|---|
 | Хост | `193.124.184.192` (Ubuntu 22.04, 16 ядер, 62 ГБ RAM) |
+| Логин-хост | `193-124-184-192.sslip.io` (portal клиента; сертификат Let's Encrypt RSA, автопродление `/opt/asuracore/cert.sh` по cron) |
 | SSH | `ssh asura` (ключ `~/.ssh/asura_srv`, алиас в `~/.ssh/config`) |
 | Клиент | 12.1.0.69875 (Midnight) |
 | БД | MySQL 8.0: базы `auth`, `characters`, `world`, `hotfixes`, пользователь `asura`, пароль в `/root/.asuracore_dbpass` |

@@ -6,7 +6,7 @@
 #   ... -Portal login.example.com      # другой адрес логин-сервера
 
 param(
-    [string]$Portal = "193.124.184.192",
+    [string]$Portal = "193-124-184-192.sslip.io",
     [string]$Build  = "12.1.0.69875"
 )
 
