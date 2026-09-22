@@ -1,4 +1,4 @@
--- AsuraCORE: Void Sanctum hub (Voidstorm, map 2771) + Priory of the Void (map 2649) + boss Nal'Azur
+-- AsuraCORE: Asura Sanctum hub (own map 9000) + Priory of the Void (map 2649) + boss Nal'Azur
 -- Custom ID range: 900000+
 
 SET @BOSS   := 900000;
@@ -43,13 +43,13 @@ INSERT INTO `creature` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficult
 
 DELETE FROM `gameobject` WHERE `guid` = @OGUID;
 INSERT INTO `gameobject` (`guid`, `id`, `map`, `zoneId`, `areaId`, `spawnDifficulties`, `phaseUseFlags`, `PhaseId`, `PhaseGroup`, `terrainSwapMap`, `position_x`, `position_y`, `position_z`, `orientation`, `rotation0`, `rotation1`, `rotation2`, `rotation3`, `spawntimesecs`, `animprogress`, `state`, `ScriptName`, `StringId`, `VerifiedBuild`) VALUES
--- in front of the Voidstorm arrival point (".tele Voidstorm")
-(@OGUID, @PORTAL, 2771, 0, 0, '0', 0, 0, 0, -1, 1915.1, 589.5, -180.0, 1.57, 0, 0, 0.7071, 0.7071, 120, 255, 1, '', NULL, 0);
+-- on the Asura Sanctum island (map 9000), in front of the arrival point
+(@OGUID, @PORTAL, 9000, 0, 0, '0', 0, 0, 0, -1, 1052.0, 1066.7, 50.84, 0, 0, 0, 0, 1, 120, 255, 1, '', NULL, 0);
 
 -- GM teleport points
 DELETE FROM `game_tele` WHERE `name` IN ('AsuraSanctum', 'AsuraPriory', 'AsuraNalazur');
 INSERT INTO `game_tele` (`id`, `position_x`, `position_y`, `position_z`, `orientation`, `map`, `name`) VALUES
-((SELECT m FROM (SELECT MAX(id)+1 m FROM game_tele) t), 1915.0, 595.5, -180.0, 4.73, 2771, 'AsuraSanctum');
+((SELECT m FROM (SELECT MAX(id)+1 m FROM game_tele) t), 1066.7, 1066.7, 51.2, 3.14, 9000, 'AsuraSanctum');
 INSERT INTO `game_tele` (`id`, `position_x`, `position_y`, `position_z`, `orientation`, `map`, `name`) VALUES
 ((SELECT m FROM (SELECT MAX(id)+1 m FROM game_tele) t), 3021.4, 994.7, 514.3, 1.68, 2649, 'AsuraPriory');
 INSERT INTO `game_tele` (`id`, `position_x`, `position_y`, `position_z`, `orientation`, `map`, `name`) VALUES

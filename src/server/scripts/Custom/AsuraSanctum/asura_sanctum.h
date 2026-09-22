@@ -13,8 +13,8 @@ constexpr char const* AsuraSanctumDataHeader = "APV";
 
 // Priory of the Sacred Flame map, reused as our instance
 constexpr uint32 MAP_ASURA_PRIORY = 2649;
-// Voidstorm (Midnight zone), our hub
-constexpr uint32 MAP_ASURA_HUB    = 2771;
+// Asura Sanctum floating island - our own map (hotfix Map 9000, terrain from tools/mapkit)
+constexpr uint32 MAP_ASURA_HUB    = 9000;
 
 constexpr uint32 EncounterCount = 1;
 
@@ -34,7 +34,7 @@ enum AsuraSanctumGameObjects
     GO_VOID_PORTAL = 900000
 };
 
-Position const AsuraHubPortalExit     = { 1915.0f,  595.5f, -180.0f, 4.73f }; // where players land in the hub
+Position const AsuraHubPortalExit     = { 1066.7f, 1066.7f,   51.2f, 3.14f }; // where players land in the hub
 Position const AsuraInstanceEntrance  = { 3021.4f,  994.7f,  514.3f, 1.68f }; // instance entrance
 Position const AsuraExitPortalSpawn   = { 2936.5f, 1834.4f,  652.8f, 4.71f }; // exit portal after the boss dies
 
