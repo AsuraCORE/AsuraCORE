@@ -1,5 +1,5 @@
 -- AsuraCORE: new map 9000 "Святилище Асуры" (floating void island), terrain files are served by the launcher
--- WDT FileDataID 9100000 (see F:\AsuraCORE\tools\mapkit\make_island.py)
+-- WDT FileDataID 1440315: Plunder Isle WDT, replaced by the launcher with ours (see asura/mapkit/make_island.py)
 
 SET @MAP     := 9000;
 SET @MAPDIFF := 90000;
