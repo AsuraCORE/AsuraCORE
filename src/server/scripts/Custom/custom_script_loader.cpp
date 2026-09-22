@@ -19,6 +19,12 @@
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
+// AsuraCORE: Priory of the Void
+void AddSC_instance_asura_priory_of_the_void();
+void AddSC_boss_nalazur();
+
 void AddCustomScripts()
 {
+    AddSC_instance_asura_priory_of_the_void();
+    AddSC_boss_nalazur();
 }

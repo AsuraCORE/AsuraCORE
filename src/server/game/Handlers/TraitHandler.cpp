@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "Log.h"
 #include "WorldSession.h"
 #include "Battleground.h"
 #include "DB2Stores.h"
@@ -130,6 +131,7 @@ void WorldSession::HandleTraitsCommitConfig(WorldPackets::Traits::TraitsCommitCo
     TraitMgr::LearnResult validationResult = TraitMgr::ValidateConfig(newConfigState, _player, true);
     if (validationResult != TraitMgr::LearnResult::Ok)
     {
+        TC_LOG_INFO("spells.traits", "TraitsCommitConfig: {} config {} rejected, result {}", _player->GetName(), configId, AsUnderlyingType(validationResult));
         SendPacket(WorldPackets::Traits::TraitConfigCommitFailed(configId, 0, AsUnderlyingType(validationResult)).Write());
         return;
     }

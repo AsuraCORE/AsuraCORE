@@ -19,6 +19,7 @@
 #include "DB2Stores.h"
 #include "FlatSet.h"
 #include "IteratorPair.h"
+#include "Log.h"
 #include "MapUtils.h"
 #include "TraitPacketsCommon.h"
 #include "UpdateFields.h"
@@ -871,15 +872,24 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
     auto isValidTraitEntry = [&](WorldPackets::Traits::TraitEntry const& traitEntry)
     {
         if (!IsValidEntry(traitEntry))
+        {
+            TC_LOG_INFO("spells.traits", "ValidateConfig: invalid entry node {} entry {}", traitEntry.TraitNodeID, traitEntry.TraitNodeEntryID);
             return LearnResult::Unknown;
+        }
 
         Node const* node = Trinity::Containers::MapGetValuePtr(_traitNodes, traitEntry.TraitNodeID);
         if (node->Data->GetType() == TraitNodeType::Selection || node->Data->GetType() == TraitNodeType::SubTreeSelection)
             if (getNodeEntryCount(traitEntry.TraitNodeID) != 1)
+            {
+                TC_LOG_INFO("spells.traits", "ValidateConfig: selection node {} has {} entries", traitEntry.TraitNodeID, getNodeEntryCount(traitEntry.TraitNodeID));
                 return LearnResult::Unknown;
+            }
 
         if (!NodeMeetsTraitConditions(traitConfig, node, traitEntry.TraitNodeEntryID, player, spentCurrencies))
+        {
+            TC_LOG_INFO("spells.traits", "ValidateConfig: node {} entry {} fails trait conditions", traitEntry.TraitNodeID, traitEntry.TraitNodeEntryID);
             return LearnResult::Unknown;
+        }
 
         if (!node->ParentNodes.empty())
         {
@@ -889,7 +899,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
                 if (!isNodeFullyFilled(parentNode))
                 {
                     if (edgeType == TraitEdgeType::RequiredForAvailability)
+                    {
+                        TC_LOG_INFO("spells.traits", "ValidateConfig: node {} required parent {} not filled", traitEntry.TraitNodeID, parentNode->Data->ID);
                         return LearnResult::NotEnoughTalentsInPrimaryTree;
+                    }
 
                     continue;
                 }
@@ -898,7 +911,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
             }
 
             if (!hasAnyParentTrait)
+            {
+                TC_LOG_INFO("spells.traits", "ValidateConfig: node {} has no filled parent", traitEntry.TraitNodeID);
                 return LearnResult::NotEnoughTalentsInPrimaryTree;
+            }
         }
 
         return LearnResult::Ok;
@@ -976,7 +992,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
 
         int32* grantedCount = Trinity::Containers::MapGetValuePtr(grantedCurrencies, traitCurrencyId);
         if (!grantedCount || *grantedCount < spentAmount.Total)
+        {
+            TC_LOG_INFO("spells.traits", "ValidateConfig: currency {} spent {} > granted {}", traitCurrencyId, spentAmount.Total, grantedCount ? *grantedCount : 0);
             return LearnResult::NotEnoughTalentsInPrimaryTree;
+        }
     }
 
     if (requireSpendingAllCurrencies && traitConfig.Type == TraitConfigType::Combat)
@@ -990,7 +1009,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
 
             SpentCurrency* spentAmount = Trinity::Containers::MapGetValuePtr(*spentCurrencies, traitCurrencyId);
             if (!spentAmount || spentAmount->Total != *grantedAmount)
+            {
+                TC_LOG_INFO("spells.traits", "ValidateConfig: tree currency {} spent {} != granted {}", traitCurrencyId, spentAmount ? spentAmount->Total : 0, *grantedAmount);
                 return LearnResult::UnspentTalentPoints;
+            }
         }
 
         for (auto&& [selectedTraitSubTreeId, data] : subtrees)
@@ -1006,7 +1028,10 @@ LearnResult ValidateConfig(WorldPackets::Traits::TraitConfig& traitConfig, Playe
 
                 SpentCurrency* spentAmount = Trinity::Containers::MapGetValuePtr(*spentCurrencies, subTreeCurrency->ID);
                 if (!spentAmount || spentAmount->Total != *grantedAmount)
+                {
+                    TC_LOG_INFO("spells.traits", "ValidateConfig: subtree {} currency {} spent {} != granted {}", selectedTraitSubTreeId, subTreeCurrency->ID, spentAmount ? spentAmount->Total : 0, *grantedAmount);
                     return LearnResult::UnspentTalentPoints;
+                }
             }
         }
     }
