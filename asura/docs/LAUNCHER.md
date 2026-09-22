@@ -23,8 +23,6 @@ dotnet publish -r win-x64 -c Release -p:Platform=x64 --self-contained -p:Publish
    github.com/brian8544/Arctium-Launcher. Чтобы перенести её на 12.1.0, нужно заново найти сигнатуру
    `CustomFileIdHook` в Wow.exe 12.1.0.69875 (IDA/Ghidra). Это следующий этап.
    Формат маппингов тот же: `custom\mappings\*.txt` со строками `fileId;path`, файлы в `custom\files\`.
-3. Официально лаунчер проверен на ретейле до 12.0.5. Патчи в нём идут по сигнатурам, так что на 12.1.0
-   он, скорее всего, заработает, но проверить можно только с клиентом.
 
 ## Пакет для игроков
 `powershell -ExecutionPolicy Bypass -File F:\AsuraCORE\tools\pack-client.ps1` создаёт `dist\AsuraCORE-client-*.zip`
