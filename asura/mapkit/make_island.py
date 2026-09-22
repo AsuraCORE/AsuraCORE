@@ -14,7 +14,7 @@ import adt
 
 SRC = 'F:/AsuraCORE/client/casc-out/'
 OUT = 'F:/AsuraCORE/custom/'
-MAP_DIR = 'asurasanctum'
+MAP_DIR = 'plunderisle'  # donor path in the listfile (the launcher replaces these FileDataIDs)
 
 TEMPLATE_ROOT = 1439113   # PlunderIsle_29_29.adt (flat, empty)
 TEMPLATE_OBJ0 = 1439116
