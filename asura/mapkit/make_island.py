@@ -22,7 +22,9 @@ TEMPLATE_OBJ1 = 1439119
 DONOR_WDT = 1440315       # PlunderIsle.wdt (MPHD flags)
 GROUND_TEXTURE = 5876849  # tileset/expansion11/12vdl_voidrockpattern01_1024.blp
 
-FDID_BASE = 9100000       # our FileDataID range
+# The launcher (Burralis) only replaces files that already exist in the client, it cannot add new
+# FileDataIDs. So our map is delivered under the FileDataIDs of the unused Plunder Isle map (1644).
+WDT_FDID = DONOR_WDT
 TILES = [(29, 29), (30, 29), (29, 30), (30, 30)]  # (col, row) in the 64x64 grid
 
 TILE = 1600.0 / 3.0       # 533.333
@@ -142,6 +144,14 @@ def make_wdt(donor, tile_fdids):
     return adt.build(out)
 
 
+def donor_tile_fdids(wdt):
+    for tag, payload in adt.parse(wdt):
+        if tag == 'MAID':
+            ids = struct.unpack('<%dI' % (len(payload) // 4), payload)
+            return {(i % 64, i // 64): ids[i * 8:i * 8 + 8] for i in range(4096) if ids[i * 8]}
+    return {}
+
+
 def main():
     read = lambda fdid: open(SRC + str(fdid), 'rb').read()
     files_dir = os.path.join(OUT, 'files', 'world', 'maps', MAP_DIR)
@@ -149,8 +159,8 @@ def main():
     os.makedirs(os.path.join(OUT, 'mappings'), exist_ok=True)
 
     mappings = []
-    fdid = FDID_BASE + 1
     tile_fdids = {}
+    donor_maid = donor_tile_fdids(read(DONOR_WDT))
     template_root, obj0, obj1 = read(TEMPLATE_ROOT), read(TEMPLATE_OBJ0), read(TEMPLATE_OBJ1)
     tex0 = make_tex0()
     for col, row in TILES:
@@ -159,22 +169,20 @@ def main():
                  (name + '_obj0.adt', obj0),
                  (name + '_obj1.adt', obj1),
                  (name + '_tex0.adt', tex0)]
-        ids = []
-        for fname, data in files:
+        ids = donor_maid[(col, row)][:4]  # root, obj0, obj1, tex0 of the donor tile
+        for fid, (fname, data) in zip(ids, files):
             open(os.path.join(files_dir, fname), 'wb').write(data)
-            mappings.append('%d;world/maps/%s/%s' % (fdid, MAP_DIR, fname))
-            ids.append(fdid)
-            fdid += 1
+            mappings.append('%d;world/maps/%s/%s' % (fid, MAP_DIR, fname))
         # root, obj0, obj1, tex0, lod, mapTexture, mapTextureN, minimap
-        tile_fdids[(col, row)] = ids + [0, 0, 0, 0]
+        tile_fdids[(col, row)] = list(ids) + [0, 0, 0, 0]
 
     wdt_name = MAP_DIR + '.wdt'
     open(os.path.join(files_dir, wdt_name), 'wb').write(make_wdt(read(DONOR_WDT), tile_fdids))
-    mappings.insert(0, '%d;world/maps/%s/%s' % (FDID_BASE, MAP_DIR, wdt_name))
+    mappings.insert(0, '%d;world/maps/%s/%s' % (WDT_FDID, MAP_DIR, wdt_name))
 
     open(os.path.join(OUT, 'mappings', MAP_DIR + '.txt'), 'w', newline='\n').write('\n'.join(mappings) + '\n')
     top = max(height(CENTER[0] + dx, CENTER[1] + dy) for dx in range(-20, 21, 5) for dy in range(-20, 21, 5))
-    print('files:', len(mappings), 'WDT fdid', FDID_BASE, 'center', CENTER, 'center height %.1f' % top)
+    print('files:', len(mappings), 'WDT fdid', WDT_FDID, 'center', CENTER, 'center height %.1f' % top)
 
 
 if __name__ == '__main__':
