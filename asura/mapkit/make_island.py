@@ -127,13 +127,13 @@ def make_tex0():
 def make_wdt(donor, tile_fdids):
     out = []
     for tag, payload in adt.parse(donor):
-        if tag == 'MPHD':
-            flags = struct.unpack_from('<I', payload)[0]
-            payload = struct.pack('<8I', flags, 0, 0, 0, 0, 0, 0, 0)  # no lgt/occ/fogs/mpv/tex/wdl yet
-        elif tag == 'MAIN':
+        # MPHD is kept as is: its flags promise lgt/occ/fogs/mpv/tex/wdl files and the client
+        # raises a streaming error when those references are zero
+        if tag == 'MAIN':
             main = bytearray(len(payload))
             for col, row in tile_fdids:
-                struct.pack_into('<II', main, (row * 64 + col) * 8, 1, 0)
+                o = (row * 64 + col) * 8
+                main[o:o + 8] = payload[o:o + 8]
             payload = bytes(main)
         elif tag == 'MAID':
             maid = bytearray(len(payload))
@@ -174,7 +174,8 @@ def main():
             open(os.path.join(files_dir, fname), 'wb').write(data)
             mappings.append('%d;world/maps/%s/%s' % (fid, MAP_DIR, fname))
         # root, obj0, obj1, tex0, lod, mapTexture, mapTextureN, minimap
-        tile_fdids[(col, row)] = list(ids) + [0, 0, 0, 0]
+        # lod, mapTexture, mapTextureN, minimap stay the donor's (the client requires them)
+        tile_fdids[(col, row)] = list(ids) + list(donor_maid[(col, row)][4:8])
 
     wdt_name = MAP_DIR + '.wdt'
     open(os.path.join(files_dir, wdt_name), 'wb').write(make_wdt(read(DONOR_WDT), tile_fdids))
