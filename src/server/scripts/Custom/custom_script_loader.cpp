@@ -23,8 +23,13 @@
 void AddSC_instance_asura_priory_of_the_void();
 void AddSC_boss_nalazur();
 
+// AsuraCORE: Dragonriding (ported from TheGhostGroup/DragonCore)
+void AddSC_advanced_flying_spell_scripts();
+
 void AddCustomScripts()
 {
     AddSC_instance_asura_priory_of_the_void();
     AddSC_boss_nalazur();
+
+    AddSC_advanced_flying_spell_scripts();
 }
