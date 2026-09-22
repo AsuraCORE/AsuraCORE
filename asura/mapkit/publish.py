@@ -2,7 +2,7 @@
 AsuraCORE map toolkit: publish an edited map (split 12.1 ADT/WDT files, e.g. saved by AsuraNoggit)
 to the client (Burralis custom files) and to the server (TrinityCore .map heights).
 
-  python publish.py <source_root> <map_dir> <server_map_id> [--deploy]
+  python publish.py <source_root> <map_dir> <server_map_id> [--deploy] [--client-only]
 
   source_root   folder that contains world/maps/<map_dir>/ (a Noggit project folder or F:/AsuraCORE/custom/files)
   map_dir       e.g. plunderisle
@@ -79,6 +79,7 @@ def server_map_file(data):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     deploy = '--deploy' in sys.argv
+    client_only = '--client-only' in sys.argv  # textures/objects only: keep server terrain untouched
     if len(args) != 3:
         print(__doc__)
         sys.exit(1)
@@ -102,12 +103,13 @@ def main():
             open(OUT_FILES + path, 'wb').write(data)
         mappings.append('%d;%s' % (ids[path], path))
         m = TILE_RE.search(name.lower())
-        if m and not m.group(3):  # root ADT -> server heights
+        if m and not m.group(3) and not client_only:  # root ADT -> server heights
             col, row = int(m.group(1)), int(m.group(2))
             open(OUT_SERVER + '%04d_%02d_%02d.map' % (map_id, row, col), 'wb').write(server_map_file(data))
             tiles.append((col, row))
 
-    open(OUT_SERVER + '%04d.tilelist' % map_id, 'wb').write(server_map.tilelist(tiles))
+    if tiles:
+        open(OUT_SERVER + '%04d.tilelist' % map_id, 'wb').write(server_map.tilelist(tiles))
     open(OUT_MAPPINGS + map_dir + '.txt', 'w', newline='\n').write('\n'.join(mappings) + '\n')
     print('client files: %d, server tiles: %d' % (len(mappings), len(tiles)))
     if missing:
@@ -117,9 +119,12 @@ def main():
         shutil.copytree(OUT_FILES + rel_dir, CLIENT_RETAIL + 'files/' + rel_dir, dirs_exist_ok=True)
         os.makedirs(CLIENT_RETAIL + 'mappings', exist_ok=True)
         shutil.copy(OUT_MAPPINGS + map_dir + '.txt', CLIENT_RETAIL + 'mappings/')
-        server_files = [OUT_SERVER + f for f in os.listdir(OUT_SERVER) if f.startswith('%04d' % map_id)]
-        subprocess.run(['scp', '-q'] + server_files + [SERVER_MAPS], check=True)
-        print('deployed to client and server (restart worldserver to reload terrain)')
+        if tiles:
+            server_files = [OUT_SERVER + f for f in os.listdir(OUT_SERVER) if f.startswith('%04d' % map_id)]
+            subprocess.run(['scp', '-q'] + server_files + [SERVER_MAPS], check=True)
+            print('deployed to client and server (restart worldserver to reload terrain)')
+        else:
+            print('deployed to client (no server terrain changes)')
 
 
 if __name__ == '__main__':
